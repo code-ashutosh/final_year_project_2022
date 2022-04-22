@@ -1,4 +1,8 @@
 numpy
+keras
+tensorflow
+xgboost
+regex
 scipy
 scikit-learn
 matplotlib
