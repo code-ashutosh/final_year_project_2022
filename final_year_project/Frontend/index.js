@@ -54,14 +54,99 @@ async function APICall(text){
 }
 
 document.getElementById('btn').onclick = addTable;
+document.getElementById('btn2').onclick = getBooks;
+
+async function getBooks(){
+    var data = document.getElementById('input').value;
+    var emotion = await APICall(data);
+    console.log(emotion);
+    var response = await fetch('https://www.googleapis.com/books/v1/volumes?q=subject:'+emotion+'&key=AIzaSyAKPGfNddmIX24iS3_kL27cuZs0p0rgcos'
+        // , {
+        // method: "POST",
+        // crossDomain: true,
+        // body: JSON.stringify({ query: text, lang: "en", sessionId: "somerandomthing" }),
+        // contentType: "application/json; charset=utf-8",
+        // dataType: "json",
+        // headers: {"Content-type": "application/json; charset=UTF-8"}
+        // }
+        ).then(response=>response.json());
+    console.log(response);
+
+    let val = response['totalItems'];
+    if(val>5)
+    val=5;
+    var myTableDiv = document.getElementById("table");
+    // console.log("The table is being created");
+    var earlierTable = document.getElementById('newTable');
+    if(earlierTable!=null)
+    earlierTable.remove();
+    var table = document.createElement('TABLE');
+    
+    table.setAttribute('class',"table");
+    table.setAttribute('id',"newTable");
+    
+    var tableHeader = document.createElement('thead');
+    tableHeader.setAttribute('class', 'thead-dark');
+
+    var tr1 = document.createElement('TR');
+
+    var th0 = document.createElement('th');
+    th0.appendChild(document.createTextNode('#'));
+    th0.scope = 'col';
+    tr1.appendChild(th0);
+
+    var th1 = document.createElement('th');
+    th1.appendChild(document.createTextNode('Title'));
+    th1.scope = 'col';
+    tr1.appendChild(th1);
+    
+    var th2 = document.createElement('th');
+    th2.appendChild(document.createTextNode('Author'));
+    th2.scope = 'col';
+    tr1.appendChild(th2);
+
+    tableHeader.appendChild(tr1);
+
+    table.appendChild(tableHeader);
+
+    var tableBody = document.createElement('TBODY');
+    table.appendChild(tableBody);
+    tableBody.setAttribute('id','table-body');
+
+    let count=1;
+    for(let i=0;i<val;i++){
+        var tr = document.createElement('TR');
+       tableBody.appendChild(tr);
+       var first = document.createElement('th');
+        first.setAttribute("scope","row");
+        first.width='75';
+        first.textContent = count;
+        count+=1;
+        tr.appendChild(first);
+       var td = document.createElement('TD');
+        td.width='75';
+        td.appendChild(document.createTextNode(response['items'][i]['volumeInfo']['title']));
+        tr.appendChild(td);
+        var td2 = document.createElement('TD');
+        td2.width='75';
+        td2.appendChild(document.createTextNode(response['items'][i]['volumeInfo']['authors'][0]));
+        tr.appendChild(td2);
+    }
+    myTableDiv.appendChild(table);
+}
 
 async function addTable() {
       
     var myTableDiv = document.getElementById("table");
     // console.log("The table is being created");
+    var earlierTable = document.getElementById('newTable');
+    if(earlierTable!=null)
+    earlierTable.remove();
     var table = document.createElement('TABLE');
     
     table.setAttribute('class',"table");
+    table.setAttribute('id',"newTable");
+    
     var tableHeader = document.createElement('thead');
     tableHeader.setAttribute('class', 'thead-dark');
 
