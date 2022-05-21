@@ -1,216 +1,710 @@
+
+//---------------------------------- Credentials Section ----------------------------------//
+// All credentials come from credentials.js which isnt on github
+
+// Information needed to access the api.ai bot, only thing needed to be changed 
+// Emoji Bot
+var accessToken = credentialsAccessToken;
+
+//var bot name is used for the firebase database
+var botName = credentialsBotName;
+
 var baseUrl = credentialsBaseUrl;
 
+// Initialize Firebase
+var config = credentialsConfig;
 
-async function APICall(text){
-    try{
+// The format for config is as follows
+// Set the configuration for your app
+// TODO: Replace with your project's config object
+// You can get this information by creating a project and clicking connect with web or start with web
+// var config = {
+// 	apiKey: "apiKey",
+// 	authDomain: "projectId.firebaseapp.com",
+// 	databaseURL: "https://databaseName.firebaseio.com",
+// 	storageBucket: "bucket.appspot.com"
+// };
 
-        // var text = document.getElementById('input').value;
-        // text = "hello there"
-        // console.log(text);
-        var response = await fetch(baseUrl+'predict/'
-        , {
-        method: "POST",
-        crossDomain: true,
-        body: JSON.stringify({ query: text, lang: "en", sessionId: "somerandomthing" }),
-        contentType: "application/json; charset=utf-8",
-        dataType: "json",
-        headers: {"Content-type": "application/json; charset=UTF-8"}
-        }
-        ).then(response=>response.json());
-        // console.log(response.json());
-        // console.log(response.status);
-    //    console.log(response);
-       return response['prediction'];
-    }
-    catch(err){
-        console.log(err.message);
-    }
+
+firebase.initializeApp(config);
+
+// Key for this instance of the chat interface
+var newKey = firebase.database().ref(botName).push().key;
+console.log("Key for this chat instance = " + newKey);
+
+//---------------------------------- Main Code Area ----------------------------------//
+//  Variables to be used for storing the last message sent and recieved for the database
+var lastSentMessage = "";
+var lastRecievedMessage = 1;
+var ButtonClicked = false;
+
+
+var DEFAULT_TIME_DELAY = 3000;
+
+// Variable for the chatlogs div
+var $chatlogs = $('.chatlogs');
+	
+
+$('document').ready(function(){
+	
+	// Hide the switch input type button initially
+	$("#switchInputType").toggle();
+
+	// If the switch input type button is pressed
+	$("#switchInputType").click(function(event) {
+
+		// Toggle which input type is shown
+		if($('.buttonResponse').is(":visible")) {
+			$("#switchInputType").attr("src", "Images/multipleChoice.png");
+		}
+
+		else {
+			$("#switchInputType").attr("src", "Images/keyboard.png");
+		}
+		$('textarea').toggle();
+		$('.buttonResponse').toggle();
+
+	});
+
+
+
+
+	//----------------------User Sends Message Methods--------------------------------//
+	// Method which executes once the enter key on the keyboard is pressed
+	// Primary function sends the text which the user typed
+	$("textarea").keypress(function(event) {
+		
+		// If the enter key is pressed
+		if(event.which === 13) {
+
+			// Ignore the default function of the enter key(Dont go to a new line)
+			event.preventDefault();
+
+			ButtonClicked = false;
+
+			// Call the method for sending a message, pass in the text from the user
+			send(this.value);
+			
+			// reset the size of the text area
+			$(".input").attr("rows", "1");
+
+			// Clear the text area
+			this.value = "";
+
+			if($("#switchInputType").is(":visible")) {
+				$("#switchInputType").toggle();
+				$('.buttonResponse').remove();
+			}
+
+		}
+	});
+
+
+	// If the user presses the button for voice input
+	$("#rec").click(function(event) {
+
+		// Call the method to switch recognition to voice input
+		switchRecognition();
+	});
+
+
+
+	// If the user selects one of the dynamic button responses
+	$('.chat-form').on("click", '.buttonResponse', function() {
+
+		ButtonClicked = true;
+
+		// Send the text on the button as a user message
+		send(this.innerText);
+		
+		// Show the record button and text input area
+		//$('#rec').toggle();
+		$('textarea').toggle();
+
+		// Hide the button responses and the switch input button
+		$('.buttonResponse').toggle();
+		$('#switchInputType').hide();
+
+		// Remove the button responses from the div
+		$('.buttonResponse').remove();
+		
+	});
+
+})
+
+
+// Method which takes the users text and sends an AJAX post request to API.AI
+// Creates a new Div with the users text, and recieves a response message from API.AI 
+function send(text) {
+
+	// Create a div with the text that the user typed in
+	$chatlogs.append(
+        $('<div/>', {'class': 'chat self'}).append(
+            $('<p/>', {'class': 'chat-message', 'text': text})));
+
+	// Find the last message in the chatlogs
+	var $sentMessage = $(".chatlogs .chat").last();
+	
+	// Check to see if that message is visible
+	checkVisibility($sentMessage);
+
+	// update the last message sent variable to be stored in the database and store in database
+	lastSentMessage = text;
+	storeMessageToDB();
+
+
+	// AJAX post request, sends the users text to API.AI and 
+	// calls the method newReceivedMessage with the response from API.AI
+	// $.ajax({
+	// 	type: "POST",
+	// 	url: baseUrl + "query?v=20150910",
+	// 	contentType: "application/json; charset=utf-8",
+	// 	dataType: "json",
+	// 	headers: {
+	// 		"Authorization": "Bearer " + accessToken
+	// 	},
+	// 	data: JSON.stringify({ query: text, lang: "en", sessionId: "somerandomthing" }),
+	// 	success: function(data) {
+    //         console.log(data);
+		
+	// 	// Pass the response into the method 
+	// 	newRecievedMessage(JSON.stringify(data.result.fulfillment.speech, undefined, 2));
+
+	// 	},
+	// 	error: function() {
+	// 		newRecievedMessage("Internal Server Error");
+	// 	}
+	// });
+
+
+	$.ajax({
+		type: "POST",
+		url: baseUrl + "predict/",
+		crossDomain: true,
+		contentType: "application/json; charset=utf-8",
+		dataType: "json",
+		"headers": {
+			"accept": "application/json",
+			"Access-Control-Allow-Origin":"*"
+		},
+		data: JSON.stringify({ query: text, lang: "en", sessionId: "somerandomthing" }),
+		success: function(data) {
+            console.log(data);
+		
+		let tag = data.prediction;
+		console.log("tag = " + tag);
+
+
+
+
+// 
+let suggestionsBox = document.getElementsByClassName('suggestions')[0];
+
+const baseURL = 'https://www.youtube.com/embed/';
+// Grab the videos based on suggestions
+let videoIdList = [] ;
+if(tag === "joy"){
+	tag = "cheerful";
+}
+else if(tag === "sadness"){
+	tag = "sad"
 }
 
- async function getData(){
-    var data = document.getElementById('input').value;
-    // console.log(data);
-    var arr = data.split('. ');
-    var results={};
-    // console.log('joy is: '+results['joy']);
-    for(let element in arr){
-    console.log(arr[element]);
-      var emotion = await APICall(arr[element]);
-    //   console.log(typeof(emotion));
-    // await console.log(typeof(results[emotion]));
-    // await console.log(emotion in results);
-    // await console.log(results.emotion);
-    // console.log((results[emotion]+1));
-      if(emotion in results) 
-      {results[emotion]+=1;}
-      else
-       results[emotion]=1;
-    //    console.log(results[emotion]);
-    }
-    
-    
+if(tag === 'Tell me something, I will try to predict some song for you'){
+	createNewMessage("Tell me something, I will try to predict some song for you");
+}
+else{
+	//variable for your API_KEY
+const YOUTUBE_API_KEY = "AIzaSyCh7AzykmAv6_RjbZ1ftwu_37x6-aGUJ-c";
+const url = " https://youtube.googleapis.com/youtube/v3/search?q="+tag+"%20hindi%20songs&key=" + YOUTUBE_API_KEY + "&maxResults=20";
+fetch(url)
+  .then(response => response.json())
+  .then(data => {
+    // console.log(data.items);
+	shuffle(data.items);
+	for(item of data.items){
+		// console.log(item.id.videoId);
+		if(!!item.id.videoId)
+		videoIdList.push(item.id.videoId);
+	}
 
-    return results;
+	console.log(videoIdList);
+
+	deleteChild();
+	for(let i=1; i<=3 ;i++){
+		let src = baseURL+videoIdList[i];
+		let frame = createIframe(src);
+		suggestionsBox.appendChild(frame);
+	}
+	suggestionsBox.style.display = "block";
+});	
+
+}
+  
+// 
+		// http://ws.audioscrobbler.com/2.0/?method=tag.gettoptracks&tag=disco&api_key=97dd8ee9d3599ce1ccc8322873ce1bf1&format=json
+		
+	
+		// else{
+		// 	$.get('http://ws.audioscrobbler.com/2.0/?method=tag.gettoptracks&tag='+tag+'&api_key=97dd8ee9d3599ce1ccc8322873ce1bf1&format=json',  // url
+		// function (data, textStatus, jqXHR) {  // success callback
+		// 	console.dir(data.tracks.track[0].url);
+		// 	// window.open(data.tracks.track[0].url, '_blank').focus();
+		// 	let a= document.createElement('a');
+		// 	a.target= '_blank';
+		// 	a.href= data.tracks.track[0].url;
+		// 	a.click();
+			
+		// });
+		// Pass the response into the method 
+		// newRecievedMessage(JSON.stringify(data.prediction, undefined, 2));
+		
+		if( tag === "love")
+		tag = "full of love"
+		
+		createNewMessage("You seem "+tag+" let me suggest some songs for you");
+		
+		
+		},
+		error: function() {
+			newRecievedMessage("Internal Server Error");
+		}
+	});
+
 }
 
-document.getElementById('btn').onclick = addTable;
-document.getElementById('btn2').onclick = getBooks;
 
-async function getBooks(){
-    var data = document.getElementById('input').value;
-    var emotion = await APICall(data);
-    console.log(emotion);
-    var response = await fetch('https://www.googleapis.com/books/v1/volumes?q=subject:'+emotion+'&key=AIzaSyAKPGfNddmIX24iS3_kL27cuZs0p0rgcos'
-        // , {
-        // method: "POST",
-        // crossDomain: true,
-        // body: JSON.stringify({ query: text, lang: "en", sessionId: "somerandomthing" }),
-        // contentType: "application/json; charset=utf-8",
-        // dataType: "json",
-        // headers: {"Content-type": "application/json; charset=UTF-8"}
-        // }
-        ).then(response=>response.json());
-    console.log(response);
+//----------------------User Receives Message Methods--------------------------------//
 
-    let val = response['totalItems'];
-    if(val>5)
-    val=5;
-    var myTableDiv = document.getElementById("table");
-    // console.log("The table is being created");
-    var earlierTable = document.getElementById('newTable');
-    if(earlierTable!=null)
-    earlierTable.remove();
-    var table = document.createElement('TABLE');
-    
-    table.setAttribute('class',"table");
-    table.setAttribute('id',"newTable");
-    
-    var tableHeader = document.createElement('thead');
-    tableHeader.setAttribute('class', 'thead-dark');
 
-    var tr1 = document.createElement('TR');
+// Method called whenver there is a new recieved message
+// This message comes from the AJAX request sent to API.AI
+// This method tells which type of message is to be sent
+// Splits between the button messages, multi messages and single message
+function newRecievedMessage(messageText) {
 
-    var th0 = document.createElement('th');
-    th0.appendChild(document.createTextNode('#'));
-    th0.scope = 'col';
-    tr1.appendChild(th0);
+	// Variable storing the message with the "" removed
+	var removedQuotes = messageText.replace(/[""]/g,"");
 
-    var th1 = document.createElement('th');
-    th1.appendChild(document.createTextNode('Title'));
-    th1.scope = 'col';
-    tr1.appendChild(th1);
-    
-    var th2 = document.createElement('th');
-    th2.appendChild(document.createTextNode('Author'));
-    th2.scope = 'col';
-    tr1.appendChild(th2);
+	// update the last message recieved variable for storage in the database
+	lastRecievedMessage = removedQuotes;
 
-    tableHeader.appendChild(tr1);
+	// If the message contains a <ar then it is a message
+	// whose responses are buttons
+	if(removedQuotes.includes("<ar"))
+	{
+		buttonResponse(removedQuotes);	
+	}
 
-    table.appendChild(tableHeader);
+	// if the message contains only <br then it is a multi line message
+	else if (removedQuotes.includes("<br")) 
+	{
+		multiMessage(removedQuotes);
+	} 
 
-    var tableBody = document.createElement('TBODY');
-    table.appendChild(tableBody);
-    tableBody.setAttribute('id','table-body');
+	// There arent multiple messages to be sent, or message with buttons
+	else
+	{	
+		// Show the typing indicator
+		showLoading();
 
-    let count=1;
-    for(let i=0;i<val;i++){
-        var tr = document.createElement('TR');
-       tableBody.appendChild(tr);
-       var first = document.createElement('th');
-        first.setAttribute("scope","row");
-        first.width='75';
-        first.textContent = count;
-        count+=1;
-        tr.appendChild(first);
-       var td = document.createElement('TD');
-        td.width='75';
-        td.appendChild(document.createTextNode(response['items'][i]['volumeInfo']['title']));
-        tr.appendChild(td);
-        var td2 = document.createElement('TD');
-        td2.width='75';
-        td2.appendChild(document.createTextNode(response['items'][i]['volumeInfo']['authors'][0]));
-        tr.appendChild(td2);
-    }
-    myTableDiv.appendChild(table);
+		// After 3 seconds call the createNewMessage function
+		setTimeout(function() {
+			createNewMessage(removedQuotes);
+		}, DEFAULT_TIME_DELAY);
+	}
 }
 
-async function addTable() {
-      
-    var myTableDiv = document.getElementById("table");
-    // console.log("The table is being created");
-    var earlierTable = document.getElementById('newTable');
-    if(earlierTable!=null)
-    earlierTable.remove();
-    var table = document.createElement('TABLE');
-    
-    table.setAttribute('class',"table");
-    table.setAttribute('id',"newTable");
-    
-    var tableHeader = document.createElement('thead');
-    tableHeader.setAttribute('class', 'thead-dark');
 
-    var tr1 = document.createElement('TR');
 
-    var th0 = document.createElement('th');
-    th0.appendChild(document.createTextNode('#'));
-    th0.scope = 'col';
-    tr1.appendChild(th0);
 
-    var th1 = document.createElement('th');
-    th1.appendChild(document.createTextNode('Emotion'));
-    th1.scope = 'col';
-    tr1.appendChild(th1);
-    
-    var th2 = document.createElement('th');
-    th2.appendChild(document.createTextNode('Percentage'));
-    th2.scope = 'col';
-    tr1.appendChild(th2);
+// Method which takes messages and splits them based off a the delimeter <br 2500>
+// The integer in the delimeter is optional and represents the time delay in milliseconds
+// if the delimeter is not there then the time delay is set to the default
+function multiMessage(message)
+{
 
-    tableHeader.appendChild(tr1);
+	// Stores the matches in the message, which match the regex
+	var matches;
 
-    table.appendChild(tableHeader);
+	// List of message objects, each message will have a text and time delay
+	var listOfMessages = [];
+	
+	// Regex used to find time delay and text of each message
+	var regex = /\<br(?:\s+?(\d+))?\>(.*?)(?=(?:\<br(?:\s+\d+)?\>)|$)/g;
 
-    var tableBody = document.createElement('TBODY');
-    table.appendChild(tableBody);
-    tableBody.setAttribute('id','table-body')
-    results = await getData();
+	// While matches are still being found in the message
+	while(matches = regex.exec(message))
+	{
+		// if the time delay is undefined(empty) use the default time delay
+		if(matches[1] == undefined)
+		{
+			matches[1] = DEFAULT_TIME_DELAY;
+		}
 
-    let total = 0;
-    
-    for(let prop in results){
-        
-        // console.log(prop+' has value '+await results[prop])
-        total+= await results[prop];
-    }
+		// Create an array of the responses which will be buttons
+		var messageText  = matches[2].split(/<ar>/);
 
-    if(total==0)
-    total=1;
+		// Create a message object and add it to the list of messages
+		listOfMessages.push({
+				text: messageText[0],
+				delay: matches[1]
+		});
+	}
 
-    for(let prop in results){
-        results[prop] = (results[prop]*100)/total;
-    }
-    // console.log(results);
-    let count = 1
-    for (prop in results){
-       var tr = document.createElement('TR');
-       tableBody.appendChild(tr);
-       var first = document.createElement('th');
-        first.setAttribute("scope","row");
-        first.width='75';
-        first.textContent = count;
-        count+=1;
-        tr.appendChild(first);
-       var td = document.createElement('TD');
-        td.width='75';
-        td.appendChild(document.createTextNode(prop));
-        tr.appendChild(td);
-        var td2 = document.createElement('TD');
-        td2.width='75';
-        td2.appendChild(document.createTextNode(results[prop]+'%'));
-        tr.appendChild(td2);
-       
-    }
-    myTableDiv.appendChild(table);
+
+	// loop index 
+	var i = 0;
+
+	// Variable for the number of messages
+	var numMessages = listOfMessages.length;
+
+	// Show the typing indicator
+	showLoading();
+
+	// Function which calls the method createNewMessage after waiting on the message delay
+	(function theLoop (listOfMessages, i, numMessages) 
+	{
+
+		// Method which executes after the timedelay
+		setTimeout(function () 
+		{
+
+			// Create a new message from the server
+			createNewMessage(listOfMessages[i].text);
+			
+			// If there are still more messages
+			if (i++ < numMessages - 1) 
+			{   
+				// Show the typing indicator
+				showLoading();             
+
+				// Call the method again
+				theLoop(listOfMessages, i, numMessages);
+			}
+		}, listOfMessages[i].delay);
+	
+	// Pass the parameters back into the method
+	})(listOfMessages, i, numMessages);
+
+}
+
+
+
+
+// Method called whenever an <ar tag is found
+// The responses for this type of message will be buttons
+// This method parses out the time delays, message text and button responses
+// Then creates a new message with the time delay and creates buttons for the responses
+function buttonResponse(message)
+{
+
+	// Stores the matches in the message, which match the regex
+	var matches;
+
+	// Used to store the new HTML div which will be the button	
+	var $input;
+
+	// send the message to the multi message method to split it up, message will be sent here
+	multiMessage(message);
+	
+	// Regex used to find time delay, text of the message and responses to be buttons
+	var regex = /\<br(?:\s+?(\d+))?\>(.*?)(?=(?:\<ar(?:\s+\d+)?\>)|$)/g;
+
+	// Seach the message and capture the groups which match the regex
+	matches = regex.exec(message);
+
+	console.log(matches);
+
+	// Create an array of the responses which will be buttons
+	var buttonList = message.split(/<ar>/);
+
+	// Remove the first element, The first split is the actual message
+	buttonList = buttonList.splice(1);
+
+	console.log(buttonList);
+
+	// Array which will store all of the newly created buttons
+	var listOfInputs = [];
+
+	// Loop through each response and create a button
+	for (var index = 0; index < buttonList.length; index++)
+	{
+		// Store the current button response
+		var response = buttonList[index];
+		
+		// Create a new div element with the text for the current button response
+		$input = $('<div/>', {'class': 'buttonResponse' }).append(
+            $('<p/>', {'class': 'chat-message', 'text': response}));
+
+		// add the new button to the list of buttons
+		listOfInputs.push($input);
+	}
+
+
+	// Show the typing indicator
+	showLoading();
+	
+	// After the time delay call the createNewMessage function
+	setTimeout(function() {
+			
+		
+		// Hide the send button and the text area
+		// $('#rec').toggle();
+		$('textarea').toggle();
+
+		// Show the switch input button
+		$("#switchInputType").show();
+
+		// For each of the button responses
+		for (var index = 0; index < listOfInputs.length; index++) {
+						
+			// Append to the chat-form div which is at the bottom of the chatbox
+			listOfInputs[index].appendTo($('#buttonDiv'));
+		}
+
+			
+		
+	}, matches[1]);
+
+}
+
+
+
+
+// Method to create a new div showing the text from API.AI
+function createNewMessage(message) {
+
+	// Hide the typing indicator
+	hideLoading();
+
+	// take the message and say it back to the user.
+	speechResponse(message);
+
+	// // Show the send button and the text area
+	$('#rec').css('visibility', 'visible');
+	$('textarea').css('visibility', 'visible');
+
+	// Append a new div to the chatlogs body, with an image and the text from API.AI
+	$chatlogs.append(
+		$('<div/>', {'class': 'chat friend'}).append(
+			$('<div/>', {'class': 'user-photo'}).append($('<img src="Images/ana.JPG" />')), 
+			$('<p/>', {'class': 'chat-message', 'text': message})));
+
+	// Find the last message in the chatlogs
+	var $newMessage = $(".chatlogs .chat").last();
+
+	// Call the method to see if the message is visible
+	checkVisibility($newMessage);
+}
+
+
+
+
+//------------------------------------------- Database Write --------------------------------------------------//
+
+function storeMessageToDB() {
+  
+	var date = new Date();
+	console.log(date);
+	if (lastRecievedMessage == 1) {
+ 		var storeMessage = firebase.database().ref(botName).child(newKey).push({
+    		UserResponse: lastSentMessage,
+			Time: date + ""
+		});
+  	}
+	
+	else {
+
+		var storeMessage = firebase.database().ref(botName).child(newKey).push({
+    		Question: lastRecievedMessage,
+    		UserResponse: lastSentMessage,
+			ButtonClicked: ButtonClicked,
+			Time: date + ""
+  		});
+	}
+
+}
+
+
+
+
+// Funtion which shows the typing indicator
+// As well as hides the textarea and send button
+function showLoading()
+{
+	$chatlogs.append($('#loadingGif'));
+	$("#loadingGif").show();
+
+	// $('#rec').css('visibility', 'hidden');
+	// $('textarea').css('visibility', 'hidden');
+
+	$('.chat-form').css('visibility', 'hidden');
+ }
+
+
+
+// Function which hides the typing indicator
+function hideLoading()
+{
+	$('.chat-form').css('visibility', 'visible');
+	$("#loadingGif").hide();
+
+	// Clear the text area of text
+	$(".input").val("");
+
+	// reset the size of the text area
+	$(".input").attr("rows", "1");
+	
+}
+
+
+
+// Method which checks to see if a message is in visible
+function checkVisibility(message)
+{
+	// Scroll the view down a certain amount
+	$chatlogs.stop().animate({scrollTop: $chatlogs[0].scrollHeight});
+}
+
+
+
+
+
+//----------------------Voice Message Methods--------------------------------//
+//Voice stuff
+var recognition;
+
+function startRecognition() {
+
+    console.log("Start")
+	recognition = new webkitSpeechRecognition();
+
+	recognition.onstart = function(event) {
+
+        console.log("Update");
+		updateRec();
+	};
+	
+	recognition.onresult = function(event) {
+	
+		var text = "";
+	
+		for (var i = event.resultIndex; i < event.results.length; ++i) {
+			text += event.results[i][0].transcript;
+		}
+	
+		setInput(text);
+		stopRecognition();
+	
+	};
+	
+	recognition.onend = function() {
+		stopRecognition();
+	};
+	
+	recognition.lang = "en-US";
+	recognition.start();
+
+}
+
+
+
+function stopRecognition() {
+	if (recognition) {
+        console.log("Stop Recog");
+		recognition.stop();
+		recognition = null;
+	}
+	updateRec();
+}
+
+
+
+function switchRecognition() {
+	if (recognition) {
+        console.log(" Stop if");
+		stopRecognition();
+	} else {
+		startRecognition();
+	}
+}
+
+
+function setInput(text) {
+	$(".input").val(text);
+	
+    send(text);
+	
+    $(".input").val("");
     
 }
+
+
+function updateRec() {
+	
+
+	if (recognition) {
+		$("#rec").attr("src", "Images/MicrophoneOff.png");
+	} else {
+		$("#rec").attr("src", "Images/microphone.png");
+
+	}
+}
+
+function speechResponse(message)
+{
+
+	var msg = new SpeechSynthesisUtterance();
+
+	// These lines list all of the voices which can be used in speechSynthesis
+	//var voices = speechSynthesis.getVoices();
+	//console.log(voices);
+	
+	
+	msg.default = false;
+ 	msg.voiceURI = "Fiona";
+	msg.name = "Fiona";
+	msg.localService = true;
+  	msg.text = message;
+  	msg.lang = "en";
+	msg.rate = .9;
+	msg.volume = 1;
+  	window.speechSynthesis.speak(msg);
+
+}
+
+function shuffle(array) {
+  for (let i = array.length - 1; i > 0; i--) {
+    let j = Math.floor(Math.random() * (i + 1));
+    [array[i], array[j]] = [array[j], array[i]];
+  }
+}
+
+function createIframe(src){
+	let frame = document.createElement("IFRAME");
+	frame.setAttribute("src", src);
+	frame.setAttribute("referrerpolicy", "origin-when-cross-origin");
+	return frame;
+}
+function deleteChild() {
+	var e = document.querySelector(".suggestions");
+	e.innerHTML = "";
+}
+
+
+//----------------------------------------- Resize the textarea ------------------------------------------//
+$(document)
+    .one('focus.input', 'textarea.input', function(){
+        var savedValue = this.value;
+        this.value = '';
+        this.baseScrollHeight = this.scrollHeight;
+        this.value = savedValue;
+    })
+    .on('input.input', 'textarea.input', function(){
+        var minRows = this.getAttribute('data-min-rows')|0, rows;
+        this.rows = minRows;
+        rows = Math.ceil((this.scrollHeight - this.baseScrollHeight) / 17);
+        this.rows = minRows + rows;
+	});
+	
