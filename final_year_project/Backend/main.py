@@ -5,6 +5,7 @@ Created on Tue Nov 17 21:40:41 2020
 """
 
 # 1. Library imports
+import string
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -41,9 +42,9 @@ app.add_middleware(
 
 
 
-model = keras.models.load_model('LSTM/Emotion Recognition.h5')
-tokenizer = pickle.load(open('LSTM/tokenizer.pickle','rb'))
-le = pickle.load(open('LSTM/labelEncoder.pickle','rb'))
+model = keras.models.load_model('LSTM_27/Emotion Recognition.h5')
+tokenizer = pickle.load(open('LSTM_27/tokenizer.pickle','rb'))
+le = pickle.load(open('LSTM_27/labelEncoder.pickle','rb'))
 # pickle_in = open("model3.pkl","rb")
 # classifier = pickle.load(pickle_in)
 classifier = model
@@ -63,31 +64,14 @@ def get_name(name: str):
 #    JSON data and return the predicted Bank Note with the confidence
 @app.post('/predict')
 def predict_banknote(data:Text):
-    print(data)
+    # print(data)
     data = data.dict()
-    print(data)
+    # print(data)
     text = data['query'].lower()
 
-    print('Inside app-inash')
+    print('Running LSTM 28 emotions model')
 
-    if (' hello ' in text) or (' hi ' in text):
-        prediction = "Tell me something, I will try to predict some song for you"
-        return{
-            'prediction': prediction
-        }
-
-    if (' love ' in text) or (' cute ' in text):
-        prediction = "love"
-        return{
-            'prediction': prediction
-        }
-
-    # if (' pray ' in text) or (' devotion ' in text) or (' prayer ' in text) or (' praying ' in text):
-    #     prediction = "hanuman ji"
-    #     return{
-    #         'prediction': prediction
-    #     } 
-
+    str_punc = string.punctuation.replace(',', '').replace("'",'')
     def clean(text):
         global str_punc
         text = re.sub(r'[^a-zA-Z ]', '', text)
@@ -101,18 +85,17 @@ def predict_banknote(data:Text):
     probability =  np.max(model.predict(sentence))
     print(result)    
     print(probability)
-    # print(result)
-
-    prediction = result
+    
+    emotions = ['admiration','amusement','anger','annoyance','approval','caring','confusion','curiosity','desire','disappointment','disapproval','disgust','embarrassment','excitement','fear','gratitude','grief','joy','love','nervousness','optimism','pride','realization','relief','remorse','sadness','surprise','neutral']
     
     return {
-        'prediction': prediction
+        'prediction': emotions[result]
     }
 
 # 5. Run the API with uvicorn
 #    Will run on http://127.0.0.1:8000
-if __name__ == '__main__':
-    uvicorn.run(app, host='127.0.0.1', port=8000)
+    if __name__ == '__main__':
+        uvicorn.run(app, host='127.0.0.1', port=8000)
     
 #uvicorn main:app --reload
 
