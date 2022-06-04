@@ -67,9 +67,11 @@
 
 `uvicorn main:app --reload`
 
-5. Now to access the frontend dashboard open a browser and follow this link:
+5. Now to access the frontend dashboards open a browser and follow these links:
 
 <href>http://localhost:5500/index.html`
+
+<href>http://localhost:5500/index2.html`
 
 6. Now you can try and test it on your machine
 
